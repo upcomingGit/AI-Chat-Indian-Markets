@@ -1,0 +1,8 @@
+pandas
+fastapi
+uvicorn
+slowapi
+python-dotenv
+pydantic
+lxml
+gunicorn
