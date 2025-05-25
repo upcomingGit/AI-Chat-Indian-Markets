@@ -1,7 +1,12 @@
 from fastapi import APIRouter, Request
 from openai import OpenAI
 from app.tools import tools
-from app.services.financial_data import get_historical_financials
+from app.services.financial_data import (
+    get_sector_performance,
+    get_company_performance,
+    get_companies_in_sector,
+    get_company_statement_trends
+)
 import json
 from dotenv import load_dotenv
 import os
@@ -41,25 +46,33 @@ async def chat(request: Request):
         fn_name = tool_call.function.name
         args = json.loads(tool_call.function.arguments)
 
-        if fn_name == "get_historical_financials":
-            result = get_historical_financials(args["sector"], args["years"])
-            print(f"Tool result: {result}")
-            # Step 3: Send result back to GPT-4o for final answer
-            second_response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {"role": "user", "content": user_query},
-                    {"role": "assistant", "tool_calls": msg.tool_calls},
-                    {
-                        "role": "tool",
-                        "tool_call_id": tool_call.id,
-                        "name": fn_name,
-                        "content": json.dumps(result)
-                    }
-                ]
-            )
-            print(f"Final response after tool call: {second_response.choices[0].message.content}")
-            return {"response": second_response.choices[0].message.content}
+        if fn_name == "get_sector_performance":
+            result = get_sector_performance(args["sector"])
+        elif fn_name == "get_company_performance":
+            result = get_company_performance(args["company"])
+        elif fn_name == "get_companies_in_sector":
+            result = get_companies_in_sector(args["sector"])
+        elif fn_name == "get_company_statement_trends":
+            result = get_company_statement_trends(args["company"], args["statement"])
+        else:
+            result = {"error": f"Unknown tool function: {fn_name}"}
+        print(f"Tool result: {result}")
+        # Step 3: Send result back to GPT-4o for final answer
+        second_response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "user", "content": user_query},
+                {"role": "assistant", "tool_calls": msg.tool_calls},
+                {
+                    "role": "tool",
+                    "tool_call_id": tool_call.id,
+                    "name": fn_name,
+                    "content": json.dumps(result)
+                }
+            ]
+        )
+        print(f"Final response after tool call: {second_response.choices[0].message.content}")
+        return {"response": second_response.choices[0].message.content}
 
     # Else: No tool used, just return first LLM output
     return {"response": msg.content}

@@ -1,11 +1,29 @@
-def get_historical_financials(sector: str, years: int):
-    # Mock data — replace with your DB/API call
-    return {
-        "sector": sector,
-        "years": years,
-        "trend": [
-            {"year": 2023, "revenue": 120},
-            {"year": 2022, "revenue": 100},
-            {"year": 2021, "revenue": 95}
-        ]
-    }
+import requests
+
+# 1. Get performance of all companies in a specific sector
+def get_sector_performance(sector: str):
+    url = f"https://api-indian-markets.azurewebsites.net/sectors/{sector}/financials/"
+    response = requests.get(url)
+    response.raise_for_status()
+    return response.json()
+
+# 2. Get performance of a specific company
+def get_company_performance(company: str):
+    url = f"https://api-indian-markets.azurewebsites.net/companies/{company}"
+    response = requests.get(url)
+    response.raise_for_status()
+    return response.json()
+
+# 3. Get all the companies in a sector
+def get_companies_in_sector(sector: str):
+    url = f"https://api-indian-markets.azurewebsites.net/sectors/{sector}/companies/"
+    response = requests.get(url)
+    response.raise_for_status()
+    return response.json()
+
+# 4. Get trends of a specific financial statement for a specific company
+def get_company_statement_trends(company: str, statement: str):
+    url = f"https://api-indian-markets.azurewebsites.net/companies/{company}/financials/{statement}"
+    response = requests.get(url)
+    response.raise_for_status()
+    return response.json()
