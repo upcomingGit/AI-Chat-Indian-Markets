@@ -22,7 +22,7 @@ const App = () => {
         query: input,
       });
 
-      setMessages([...newMessages, { role: "assistant", content: res.data.answer }]);
+      setMessages([...newMessages, { role: "assistant", content: res.data.response }]);
     } catch (error) {
       setMessages([...newMessages, { role: "assistant", content: "⚠️ Error fetching response." }]);
     }
