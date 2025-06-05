@@ -24,15 +24,60 @@ load_dotenv(dotenv_path="app/.env")
 router = APIRouter()
 client = OpenAI()
 
+# Example sector mapping (expand as needed)
+SECTOR_MAP = {
+    "airlines": "Air Transport Services",
+    "ceramics": "Ceramic Products",
+    "hotels": "Hotels & Restaurants",
+    "pharmaceuticals": "Pharmaceuticals",
+    "healthcare": "Healthcare",
+    # Add more mappings as needed
+}
+COMPANIES_MAP = {
+    "cera": "CERA",
+    "indigo": "INDIGO",
+    "indian hotels": "INDHOTEL",
+    "narayana hrudayalaya": "NH",
+    "caplin point": "CAPLIPOINT",
+    # Add more mappings as needed
+}
+
+FINANCIAL_STATEMENTS = {
+    "Balance Sheet": "balance-sheet",
+    "Profit & Loss": "profit-loss",
+    "Cash Flow": "cash-flow"
+    # Add more mappings as needed
+}
+
+def map_sector(user_input):
+    # Normalize input for matching
+    key = user_input.strip().lower()
+    return SECTOR_MAP.get(key)  # returns None if not found
+
 @router.post("/")
 async def chat(request: Request):
     body = await request.json()
     user_query = body.get("query")
     print(f"Received user query: {user_query}")
     # Step 1: Send user query to GPT-4o with tools
+    supported_sectors = ", ".join(sorted(SECTOR_MAP.values()))
+    supported_companies = ", ".join(sorted(COMPANIES_MAP.values()))
+    supported_financial_statements = ", ".join(sorted(FINANCIAL_STATEMENTS.values()))
+    system_prompt = (
+        f"You are a helpful assistant for Indian financial markets. "
+        f"The supported sectors are: {supported_sectors}. "
+        f"The supported companies are: {supported_companies}. "
+        f"The supported financial statements are: {supported_financial_statements}. "
+        f"If the user asks for a sector or company or financial statement not in this list, respond appropriately with 'Sector or Company or Financial Statement Not Found. Please specify a supported sector or company or financial statement'."
+        f"Mention the supported sectors, companies, and financial statements in your response to the user query."
+        f"Respond in markdown format for better readability. Use bullet points, headers, newline, tabs and bold text where appropriate. Provide spacing and formatting to enhance readability. "
+    )
     first_response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[{"role": "user", "content": user_query}],
+        model="gpt-4.1-mini",
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_query}
+        ],
         tools=tools,
         tool_choice="auto"
     )
@@ -47,11 +92,13 @@ async def chat(request: Request):
         args = json.loads(tool_call.function.arguments)
 
         if fn_name == "get_sector_performance":
-            result = get_sector_performance(args["sector"])
+            sector = map_sector(args["sector"])
+            result = get_sector_performance(sector)
         elif fn_name == "get_company_performance":
             result = get_company_performance(args["company"])
         elif fn_name == "get_companies_in_sector":
-            result = get_companies_in_sector(args["sector"])
+            sector = map_sector(args["sector"])
+            result = get_companies_in_sector(sector)
         elif fn_name == "get_company_statement_trends":
             result = get_company_statement_trends(args["company"], args["statement"])
         else:
@@ -59,7 +106,7 @@ async def chat(request: Request):
         print(f"Tool result: {result}")
         # Step 3: Send result back to GPT-4o for final answer
         second_response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gpt-4.1-mini",
             messages=[
                 {"role": "user", "content": user_query},
                 {"role": "assistant", "tool_calls": msg.tool_calls},

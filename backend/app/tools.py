@@ -35,7 +35,14 @@ tools = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "sector": {"type": "string", "description": "The sector name."}
+                    "sector": {
+                        "type": "string", 
+                        "description": (
+                            "Name of the sector to analyze. Supported sectors include: "
+                            "'Air Transport Services', 'Ceramic Products', 'Hotels & Restaurants', "
+                            "'Pharmaceuticals', 'Healthcare'."
+                        )
+                    }
                 },
                 "required": ["sector"]
             }
