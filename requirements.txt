@@ -8,3 +8,4 @@ lxml
 gunicorn
 openai
 requests
+google-genai

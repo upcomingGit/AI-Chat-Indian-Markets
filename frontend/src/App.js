@@ -35,9 +35,9 @@ const App = () => {
   return (
     <div className="h-screen w-screen flex flex-col bg-gray-900">
       <div className="w-full flex flex-col h-28 bg-gray-950 shadow-lg">
-        <div className="text-white text-2xl font-semibold p-6 text-center tracking-wide">AI Chat – Indian Financial Markets</div>
+        <div className="text-white text-2xl font-semibold p-6 text-center tracking-wide">Saras – Your Personal AI Assistant for Indian Financial Markets</div>
       </div>
-      <div className="flex-1 flex flex-col items-center overflow-y-auto space-y-6 p-10 bg-gray-900">
+      <div className="flex-1 flex flex-col items-center overflow-y-auto space-y-6 p-10 bg-gray-950">
         {messages.map((msg, i) => (
           <div key={i} className={`flex w-full max-w-4xl ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
             {msg.role === "assistant" && (
@@ -47,9 +47,15 @@ const App = () => {
               className={`prose prose-invert prose-blue prose-headings max-w-3xl w-full p-4 text-base leading-relaxed ${
                 msg.role === "user"
                   ? "bg-blue-900 text-blue-100 self-end whitespace-pre-line break-words"
-                  : "bg-gray-800 text-gray-100 self-start"
+                  : "bg-transparent text-gray-100 self-start"
               }`}
-              style={{ boxShadow: "none", border: "none", borderRadius: 0, background: msg.role === "user" ? "#1e3a8a" : "#23272e", color: msg.role === "user" ? "#dbeafe" : "#f3f4f6" }}
+              style={{
+                boxShadow: "none",
+                border: "none",
+                borderRadius: 0,
+                background: msg.role === "user" ? "#1e3a8a" : "transparent",
+                color: msg.role === "user" ? "#dbeafe" : "#f3f4f6"
+              }}
               dangerouslySetInnerHTML={{
                 __html:
                   msg.role === "assistant"
@@ -64,12 +70,12 @@ const App = () => {
         ))}
         {loading && (
           <div className="flex w-full max-w-4xl justify-start">
-            <div className="bg-gray-800 text-gray-100 p-4 self-start" style={{ boxShadow: "none", border: "none", borderRadius: 0 }}>Thinking...</div>
+            <div className="bg-transparent text-gray-100 p-4 self-start" style={{ boxShadow: "none", border: "none", borderRadius: 0 }}>Thinking...</div>
             <div className="flex-shrink-0 w-10 h-10 rounded-full bg-blue-700 text-white flex items-center justify-center ml-3 text-xl">🤖</div>
           </div>
         )}
       </div>
-      <div className="flex w-full max-w-4xl mx-auto p-6 bg-gray-950 border-t border-gray-800">
+      <div className="flex w-full max-w-4xl mx-auto p-6 bg-gray-900" style={{ borderTop: 'none' }}>
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
