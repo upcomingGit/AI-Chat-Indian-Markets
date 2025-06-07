@@ -54,6 +54,17 @@ FINANCIAL_STATEMENTS = {
 
 USE_GEMINI = False  # Set to True to use Gemini, False to use OpenAI
 
+# Simple in-memory store for chat history (keyed by user/session)
+chat_histories = {}
+
+def get_chat_history(session_id):
+    return chat_histories.get(session_id, [])
+
+def add_to_chat_history(session_id, message):
+    if session_id not in chat_histories:
+        chat_histories[session_id] = []
+    chat_histories[session_id].append(message)
+
 # --- Helpers ---
 def map_sector(user_input):
     print(f"[llm_router] Mapping sector input: {user_input}")
@@ -63,22 +74,22 @@ def get_function_result(fn_name, args):
     print(f"[llm_router] Calling function: {fn_name} with args: {args}")
     if fn_name == "get_sector_performance":
         result = get_sector_performance(map_sector(args["sector"]))
-        print(f"[llm_router] get_sector_performance result: {result}")
+        #print(f"[llm_router] get_sector_performance result: {result}")
         return result
     elif fn_name == "get_company_performance":
         result = get_company_performance(args["company"])
-        print(f"[llm_router] get_company_performance result: {result}")
+        #print(f"[llm_router] get_company_performance result: {result}")
         return result
     elif fn_name == "get_companies_in_sector":
         result = get_companies_in_sector(map_sector(args["sector"]))
-        print(f"[llm_router] get_companies_in_sector result: {result}")
+        #print(f"[llm_router] get_companies_in_sector result: {result}")
         return result
     elif fn_name == "get_company_statement_trends":
         result = get_company_statement_trends(args["company"], args["statement"])
-        print(f"[llm_router] get_company_statement_trends result: {result}")
+        #print(f"[llm_router] get_company_statement_trends result: {result}")
         return result
     else:
-        print(f"[llm_router] Unknown function: {fn_name}")
+        #print(f"[llm_router] Unknown function: {fn_name}")
         return {"error": f"Unknown function: {fn_name}"}
 
 # --- Main Chat Endpoint ---
@@ -87,7 +98,8 @@ async def chat(request: Request):
     print("[llm_router] Received POST request at chat endpoint.")
     body = await request.json()
     user_query = body.get("query")
-    print(f"[llm_router] Received user query: {user_query}")
+    session_id = body.get("session_id", "default")  # Use a real session/user id in production
+    print(f"[llm_router] Received user query: {user_query} (session: {session_id})")
 
     supported_sectors = ", ".join(sorted(SECTOR_MAP.values()))
     supported_companies = ", ".join(sorted(COMPANIES_MAP.values()))
@@ -167,43 +179,61 @@ async def chat(request: Request):
 
     else:
         print("[llm_router] Using OpenAI model.")
+        # Retrieve chat history for this session
+        history = get_chat_history(session_id)
+        # Always start with system prompt
+        messages = [{"role": "system", "content": system_prompt}] + history + [{"role": "user", "content": user_query}]
+        print(f"[llm_router] OpenAI messages: {messages}")
+
         first_response = openai_client.chat.completions.create(
             model="gpt-4.1-mini",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_query}
-            ],
+            messages=messages,
             tools=tools,
             tool_choice="auto"
         )
-        print(f"[llm_router] OpenAI first response: {first_response}")
+        print(f"[llm_router] OpenAI first response:")
 
         msg = first_response.choices[0].message
         print(f"[llm_router] OpenAI message: {msg}")
-        if msg.tool_calls:
-            tool_call = msg.tool_calls[0]
-            print(f"[llm_router] OpenAI tool call: {tool_call}")
-            fn_name = tool_call.function.name
-            args = json.loads(tool_call.function.arguments)
-            tool_result = get_function_result(fn_name, args)
-            print(f"[llm_router] OpenAI tool result: {tool_result}")
+        # Add user message to history
+        add_to_chat_history(session_id, {"role": "user", "content": user_query})
 
-            second_response = openai_client.chat.completions.create(
-                model="gpt-4.1-mini",
-                messages=[
-                    {"role": "user", "content": user_query},
+        if msg.tool_calls:
+            tool_messages = []
+            for tool_call in msg.tool_calls:
+                print(f"[llm_router] OpenAI tool call: {tool_call}")
+                fn_name = tool_call.function.name
+                args = json.loads(tool_call.function.arguments)
+                tool_result = get_function_result(fn_name, args)
+                print(f"[llm_router] OpenAI tool result")
+                tool_messages.append({
+                    "role": "tool",
+                    "tool_call_id": tool_call.id,
+                    "name": fn_name,
+                    "content": json.dumps(tool_result)
+                })
+
+            # For the second call, reconstruct messages so the assistant tool_call is right before the tool messages
+            second_messages = (
+                [{"role": "system", "content": system_prompt}]
+                + get_chat_history(session_id)
+                + [
                     {"role": "assistant", "tool_calls": msg.tool_calls},
-                    {
-                        "role": "tool",
-                        "tool_call_id": tool_call.id,
-                        "name": fn_name,
-                        "content": json.dumps(tool_result)
-                    }
+                    *tool_messages
                 ]
             )
-            print(f"[llm_router] OpenAI second response: {second_response}")
-            print(f"[llm_router] OpenAI final message content: {second_response.choices[0].message.content}")
-            return {"response": second_response.choices[0].message.content}
+            print(f"[llm_router] OpenAI second messages: {second_messages}")
+            second_response = openai_client.chat.completions.create(
+                model="gpt-4.1-mini",
+                messages=second_messages
+            )
+            print(f"[llm_router] OpenAI second response:")
+            final_content = second_response.choices[0].message.content
+            print(f"[llm_router] OpenAI final message content: {final_content}")
+            # Add assistant final response to history
+            add_to_chat_history(session_id, {"role": "assistant", "content": final_content})
+            return {"response": final_content}
         else:
             print(f"[llm_router] OpenAI no tool call, message content: {msg.content}")
+            add_to_chat_history(session_id, {"role": "assistant", "content": msg.content})
             return {"response": msg.content}
