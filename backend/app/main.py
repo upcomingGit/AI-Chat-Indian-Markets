@@ -15,7 +15,8 @@ app = FastAPI()
 # Allow frontend access (dev mode)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Replace "*" with frontend URL in production
+    allow_origins=["https://saras-ai-assistant-frontend.azurewebsites.net"],  # Replace "*" with frontend URL in production
+    #allow_origins=["*"],  # Replace "*" with frontend URL in production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

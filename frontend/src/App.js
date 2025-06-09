@@ -33,7 +33,7 @@ const App = () => {
   };
 
   return (
-    <div className="h-screen w-screen flex flex-col bg-gray-900">
+    <div className="h-screen w-full flex flex-col bg-gray-900">
       <div className="w-full flex flex-col h-28 bg-gray-950 shadow-lg">
         <div className="text-white text-2xl font-semibold p-6 text-center tracking-wide">Saras – Your Personal AI Assistant for Indian Financial Markets</div>
       </div>
@@ -59,8 +59,12 @@ const App = () => {
               dangerouslySetInnerHTML={{
                 __html:
                   msg.role === "assistant"
-                    ? DOMPurify.sanitize(marked.parse(msg.content, { gfm: true, breaks: true }))
-                    : msg.content.replace(/\n/g, '<br/>'),
+                    ? msg.content
+                      ? DOMPurify.sanitize(marked.parse(msg.content, { gfm: true, breaks: true }))
+                      : (() => { console.warn("[Debug] Assistant message content is missing or undefined", msg); return "<span style='color: #f87171'>[No response from backend]</span>"; })()
+                    : msg.content
+                      ? msg.content.replace(/\n/g, '<br/>')
+                      : (() => { console.warn("[Debug] User message content is missing or undefined", msg); return "<span style='color: #f87171'>[No user message]</span>"; })(),
               }}
             />
             {msg.role === "user" && (
