@@ -176,3 +176,4 @@ node_modules
 
 .hosting.details
 *.zip
+Azure_webapp_config.md
