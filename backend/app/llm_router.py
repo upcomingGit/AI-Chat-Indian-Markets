@@ -15,10 +15,14 @@ from google.genai import types
 
 from app.tools import tools
 from app.services.financial_data import (
-    get_sector_performance,
-    get_company_performance,
+    get_company_data,
+    get_company_data_from_financials,
+    get_company_data_from_financial_parameter,
     get_companies_in_sector,
-    get_company_statement_trends
+    get_financials_in_sector,
+    get_all_company_conference_calls,
+    get_company_conference_call_period,
+    search_chunks
 )
 
 # --- Configuration & Setup ---
@@ -31,11 +35,11 @@ gemini_client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
 
 # --- Constants & Mappings ---
 SECTOR_MAP = {
-    "airlines": "Air Transport Services",
-    "ceramics": "Ceramic Products",
-    "hotels": "Hotels & Restaurants",
+    "airline": "Airline",
+    "sanitary ware": "Sanitary Ware",
+    "hotels": "Hotels & Resorts",
     "pharmaceuticals": "Pharmaceuticals",
-    "healthcare": "Healthcare",
+    "hospital": "Hospital",
 }
 
 COMPANIES_MAP = {
@@ -49,7 +53,8 @@ COMPANIES_MAP = {
 FINANCIAL_STATEMENTS = {
     "Balance Sheet": "balance-sheet",
     "Profit & Loss": "profit-loss",
-    "Cash Flow": "cash-flow"
+    "Cash Flow": "cash-flow",
+    "Conference Call": "Conference Call",
 }
 
 USE_GEMINI = False  # Set to True to use Gemini, False to use OpenAI
@@ -72,24 +77,23 @@ def map_sector(user_input):
 
 def get_function_result(fn_name, args):
     print(f"[llm_router] Calling function: {fn_name} with args: {args}")
-    if fn_name == "get_sector_performance":
-        result = get_sector_performance(map_sector(args["sector"]))
-        #print(f"[llm_router] get_sector_performance result: {result}")
-        return result
-    elif fn_name == "get_company_performance":
-        result = get_company_performance(args["company"])
-        #print(f"[llm_router] get_company_performance result: {result}")
-        return result
+    if fn_name == "get_company_data":
+        return get_company_data(args["company_id"])
+    elif fn_name == "get_company_data_from_financials":
+        return get_company_data_from_financials(args["company_id"], args["statement_name"])
+    elif fn_name == "get_company_data_from_financial_parameter":
+        return get_company_data_from_financial_parameter(args["company_id"], args["statement_name"], args["parameter"])
     elif fn_name == "get_companies_in_sector":
-        result = get_companies_in_sector(map_sector(args["sector"]))
-        #print(f"[llm_router] get_companies_in_sector result: {result}")
-        return result
-    elif fn_name == "get_company_statement_trends":
-        result = get_company_statement_trends(args["company"], args["statement"])
-        #print(f"[llm_router] get_company_statement_trends result: {result}")
-        return result
+        return get_companies_in_sector(map_sector(args["sector"]))
+    elif fn_name == "get_financials_in_sector":
+        return get_financials_in_sector(map_sector(args["sector"]))
+    elif fn_name == "get_all_company_conference_calls":
+        return get_all_company_conference_calls(args["company_id"])
+    elif fn_name == "get_company_conference_call_period":
+        return get_company_conference_call_period(args["company_id"], args["time_period"])
+    elif fn_name == "search_chunks":
+        return search_chunks(args["query"], args["k"], args["company_name"],args["statement_type"], args["time_period"])
     else:
-        #print(f"[llm_router] Unknown function: {fn_name}")
         return {"error": f"Unknown function: {fn_name}"}
 
 # --- Main Chat Endpoint ---
@@ -106,11 +110,11 @@ async def chat(request: Request):
     supported_financial_statements = ", ".join(sorted(FINANCIAL_STATEMENTS.values()))
 
     system_prompt = (
-        f"You are a helpful assistant for Indian financial markets. "
+        f"You are a helpful and professional financial assistant for the Indian Financial Market that answers questions with clear reasoning "
         f"The supported sectors are: {supported_sectors}. "
         f"The supported companies are: {supported_companies}. "
         f"The supported financial statements are: {supported_financial_statements}. "
-        f"If the user query matches a supported function, use the appropriate tool/function call."
+        f"You have access to an API that can return company financials. Only use this data source, and do not make assumptions. If the user query matches a supported function, use the appropriate tool/function/API call."
         f"If the user asks for a sector or company or financial statement not in this list, respond appropriately with 'Sector or Company or Financial Statement Not Found. Please specify a supported sector or company or financial statement'. "
         f"Mention the supported sectors, companies, and financial statements in your response to the user query. "
         f"Respond in markdown format for better readability. Use bullet points, headers, newline, tabs and bold text where appropriate. Provide spacing and formatting to enhance readability. "
