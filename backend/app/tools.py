@@ -2,12 +2,24 @@ tools = [
     {
         "type": "function",
         "function": {
-            "name": "get_company_data",
-            "description": "Get all historical financial data for a company across all financial statements.",
+            "name": "get_companies_with_conference_calls",
+            "description": "List companies that have conference call transcripts available, with metadata.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_conference_call_details",
+            "description": "Get conference call periods (fiscal year and quarter) available for a company.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "company_id": {"type": "string", "description": "The ID of the company."}
+                    "company_id": {"type": "integer", "description": "The numeric ID of the company."}
                 },
                 "required": ["company_id"]
             }
@@ -16,106 +28,34 @@ tools = [
     {
         "type": "function",
         "function": {
-            "name": "get_company_data_from_financials",
-            "description": "Get all historical financial data for a company based on selected financial statement.",
+            "name": "get_conference_call_summary",
+            "description": "Get the summary of a specific conference call for a company (by fiscal year and quarter).",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "company_id": {"type": "string", "description": "The ID of the company."},
-                    "statement_name": {"type": "string", "description": "The financial statement name from which data is needed."}
+                    "company_id": {"type": "integer", "description": "The numeric ID of the company."},
+                    "fiscal_year": {"type": "integer", "description": "The fiscal year (e.g., 2025)."},
+                    "fiscal_quarter": {"type": "integer", "description": "The fiscal quarter (1-4)."}
                 },
-                "required": ["company_id", "statement_name"]
+                "required": ["company_id", "fiscal_year", "fiscal_quarter"]
             }
         }
     },
     {
         "type": "function",
         "function": {
-            "name": "get_company_data_from_financial_parameter",
-            "description": "Get all historical financial data for a company based on selected financial statement and specific parameter in that financial statement.",
+            "name": "conference_call_qa",
+            "description": "Ask a question about a specific conference call and retrieve top-k relevant chunks.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "company_id": {"type": "string", "description": "The ID of the company."},
-                    "statement_name": {"type": "string", "description": "The financial statement name from which data is needed."},
-                    "parameter": {"type": "string", "description": "The financial parameter to retrieve."}
+                    "company_id": {"type": "integer", "description": "The numeric ID of the company."},
+                    "fiscal_year": {"type": "integer", "description": "The fiscal year (e.g., 2025)."},
+                    "fiscal_quarter": {"type": "integer", "description": "The fiscal quarter (1-4)."},
+                    "question": {"type": "string", "description": "The user question about the conference call."},
+                    "k": {"type": "integer", "description": "Number of top results to return (default 3)."}
                 },
-                "required": ["company_id", "statement_name", "parameter"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_companies_in_sector",
-            "description": "Get all companies in a sector.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "sector": {"type": "string", "description": "The sector name."}
-                },
-                "required": ["sector"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_financials_in_sector",
-            "description": "Get the financials for all the companies in a specific sector.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "sector": {"type": "string", "description": "The sector name."}
-                },
-                "required": ["sector"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_all_company_conference_calls",
-            "description": "Get all conference call transcripts for a company.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "company_id": {"type": "string", "description": "The ID of the company."}
-                },
-                "required": ["company_id"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_company_conference_call_period",
-            "description": "Get conference call transcripts for a company for a specific time period.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "company_id": {"type": "string", "description": "The ID of the company."},
-                    "time_period": {"type": "string", "description": "The time period of the conference call."}
-                },
-                "required": ["company_id", "time_period"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "search_chunks",
-            "description": "Search for top-k similar text chunks based on a user query.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {"type": "string", "description": "The search query by the user."},
-                    "k": {"type": "integer", "description": "The number of top results to return."},
-                    "company_name": {"type": "string", "description": "The company name."},
-                    "statement_type": {"type": "string", "description": "The statement type."},
-                    "time_period": {"type": "string", "description": "The time period."}
-                },
-                "required": ["query", "k", "company_name", "statement_type", "time_period"]
+                "required": ["company_id", "fiscal_year", "fiscal_quarter", "question"]
             }
         }
     }

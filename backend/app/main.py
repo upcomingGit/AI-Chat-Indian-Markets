@@ -15,14 +15,26 @@ app = FastAPI()
 # Allow frontend access (dev mode)
 app.add_middleware(
     CORSMiddleware,
-    #allow_origins=["https://saras-ai-assistant-frontend.azurewebsites.net"],  # Replace "*" with frontend URL in production
-    allow_origins=["*"],  # Replace "*" with frontend URL in production
+    allow_origins=[
+        "https://saras-ai-assistant-frontend.azurewebsites.net",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 app.include_router(chat_router, prefix="/chat")
+
+# Optional: avoid 307 redirect from /chat to /chat/ by handling both.
+@app.get("/chat")
+async def chat_root_get():
+    return {"message": "Chat endpoint is available. POST to /chat/ for queries."}
+
+@app.get("/")
+async def root():
+    return {"status": "ok"}
 
 
 #class ChatRequest(BaseModel):
