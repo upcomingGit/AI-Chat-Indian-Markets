@@ -1,0 +1,4 @@
+{"query":"Summarize the latest Q2 conference call for TCS","expected_agent":"conference_call","reason":"explicit conference call summary"}
+{"query":"What's the EPS for RELIANCE in FY2024?","expected_agent":"financial_statements","reason":"financial metric query"}
+{"query":"Any breaking news about ADANIPORTS?","expected_agent":"news","reason":"news request"}
+{"query":"How did the company perform last quarter?","expected_agent":"financial_statements","reason":"performance -> financials"}

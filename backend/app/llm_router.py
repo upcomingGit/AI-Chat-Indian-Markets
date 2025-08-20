@@ -10,23 +10,152 @@ import json
 from fastapi import APIRouter, Request
 from openai import OpenAI
 from dotenv import load_dotenv
+from tools import tools
 
- 
+from agents.conference_call_agent import ConferenceCallAgent
+from agents.financial_statements_agent import FinancialStatementsAgent
+from agents.news_agent import NewsAgent
+from agents.market_data_agent import MarketDataAgent
+from agents.company_kb_agent import CompanyKBAgent
+from agents.company_disclosures_agent import CompanyDisclosuresAgent
+from agents.registry import registry
 
-from app.tools import tools
-from app.services.financial_data import (
+
+# --- Configuration & Setup ---
+print("[llm_router] Loading environment variables...")
+load_dotenv(dotenv_path=".env")
+
+router = APIRouter()
+openai_client = OpenAI()
+
+# Register all agents here
+print("[llm_router] Registering agents...")
+registry.register("conference_call", ConferenceCallAgent())
+registry.register("financial_statements", FinancialStatementsAgent())
+registry.register("news", NewsAgent())
+registry.register("market_data", MarketDataAgent())
+registry.register("company_kb", CompanyKBAgent())
+registry.register("company_disclosures", CompanyDisclosuresAgent())
+print("[llm_router] Agents registered.")
+
+
+def choose_agent_via_llm(user_query: str):
+    """Ask the LLM to pick an agent from the registry for the given user_query.
+
+    Returns a dict: {"agent": "registry_name", "reason": "..."}
+    If selection fails, returns None.
+    """
+    try:
+        agents_map = registry.list_agents()
+        print(f"[llm_router] Available agents for selection: {agents_map}")
+
+        # Load routing knowledge base if available
+        kb_text = ""
+        kb_path = os.path.join(os.path.dirname(__file__), "agent_routing_knowledge.md")
+        try:
+            with open(kb_path, "r", encoding="utf-8") as f:
+                kb_text = f.read()
+                print("[llm_router] Loaded agent routing knowledge base for prompt.")
+        except Exception:
+            print("[llm_router] No agent routing knowledge base found; proceeding without it.")
+
+        system_prompt = (
+            "You are an assistant that selects the best specialised agent to handle a user's query."
+            " Respond only with valid JSON in the format: {\"agent\": \"registry_name\", \"reason\": \"why\"}."
+            " If you are unsure, return agent as null.\n\n"
+            + (kb_text or "")
+        )
+
+        agent_list_text = "\n".join([f"- {name}: {clsname}" for name, clsname in agents_map.items()])
+        user_prompt = (
+            f"Available agents:\n{agent_list_text}\n\n"
+            f"User query: \"{user_query}\"\n\n"
+            "Choose the single most appropriate agent and return the JSON object as described."
+        )
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
+
+        resp = openai_client.chat.completions.create(
+            model="gpt-5-mini",
+            messages=messages
+        )
+        choice_msg = resp.choices[0].message.content
+        print(f"[llm_router] Agent selection raw response: {choice_msg}")
+
+        # Parse JSON from the model output; be permissive
+        try:
+            parsed = json.loads(choice_msg)
+            return parsed
+        except Exception:
+            # try to extract first JSON substring
+            start = choice_msg.find('{')
+            end = choice_msg.rfind('}')
+            if start != -1 and end != -1 and end > start:
+                try:
+                    parsed = json.loads(choice_msg[start:end+1])
+                    return parsed
+                except Exception as e:
+                    print(f"[llm_router] Failed parsing JSON substring: {e}")
+        return None
+    except Exception as e:
+        print(f"[llm_router] Error when asking LLM to choose agent: {e}")
+        return None
+
+# --- Main Chat Endpoint ---
+
+@router.post("")
+@router.post("/")
+async def chat_endpoint(request: Request):
+    try:
+        print("[llm_router] Received POST request at chat endpoint.")
+        body = await request.json()
+        user_query = body.get("query")
+        session_id = body.get("session_id", "default")  # Use a real session/user id in production
+        print(f"[llm_router] Received user query: {user_query} (session: {session_id})")
+
+        # Ask LLM to choose an agent
+        selection = choose_agent_via_llm(user_query)
+        print(f"[llm_router] Agent selection result: {selection}")
+
+        response = None
+        if selection and isinstance(selection, dict):
+            agent_name = selection.get("agent")
+            reason = selection.get("reason")
+            print(f"[llm_router] LLM selected agent: {agent_name} (reason: {reason})")
+
+            if agent_name and registry.get(agent_name):
+                agent = registry.get(agent_name)
+                print(f"[llm_router] Routing to agent '{agent_name}' -> {agent.__class__.__name__}")
+                try:
+                    response = agent.handle(user_query)
+                except TypeError:
+                    # fallback to just passing the query
+                    response = agent.handle(user_query)
+            else:
+                print(f"[llm_router] Selected agent '{agent_name}' not found in registry; falling back to default routing")
+
+        if response is None:
+            # fallback: let registry find a matching agent by can_handle
+            print("[llm_router] Falling back to registry.route_query")
+            response = registry.route_query(user_query)
+
+        print(f"[llm_router] Response from agent: {response}")
+        return {"response": response}
+
+    except Exception as e:
+        print(f"[llm_router] Unexpected error in chat endpoint: {e}")
+        return {"response": f"An error occurred: {e}"}
+
+'''
+from core.financial_data import (
     get_companies_with_conference_calls,
     get_conference_call_details,
     get_conference_call_summary,
     conference_call_qa,
 )
-
-# --- Configuration & Setup ---
-print("[llm_router] Loading environment variables...")
-load_dotenv(dotenv_path="app/.env")
-
-router = APIRouter()
-openai_client = OpenAI()
 
 # --- Config ---
 
@@ -142,3 +271,4 @@ async def chat(request: Request):
     except Exception as e:
         print(f"[llm_router] Unexpected error in chat endpoint: {e}")
         return {"response": f"An error occurred: {e}"}
+'''
