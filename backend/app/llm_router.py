@@ -2,6 +2,10 @@
 llm_router.py
 Router for handling LLM-based chat focused on Conference Call data.
 Supports OpenAI and Gemini tool-calling to query the latest API endpoints.
+
+Situations to cater to:
+-> Multi-turn conversation
+-> Multiple agents being called in one query
 """
 
 # --- Imports ---
@@ -9,6 +13,7 @@ import os
 import json
 from fastapi import APIRouter, Request
 from openai import OpenAI
+import threading
 from dotenv import load_dotenv
 from tools import tools
 
@@ -39,7 +44,58 @@ registry.register("company_disclosures", CompanyDisclosuresAgent())
 print("[llm_router] Agents registered.")
 
 
-def choose_agent_via_llm(user_query: str):
+# --- In-memory per-session chat histories ---
+# Keeps the most recent N messages (user + assistant) per session in memory only.
+chat_histories = {}
+chat_histories_lock = threading.Lock()
+HISTORY_LIMIT = 20
+
+
+def get_chat_history(session_id: str):
+    """Return a copy of the chat history list for the given session id.
+
+    Each message is a dict: {"role": "user"|"assistant", "content": str}
+    """
+    with chat_histories_lock:
+        return list(chat_histories.get(session_id, []))
+
+
+def add_to_chat_history(session_id: str, message: dict):
+    """Append a message to the session history and trim to the most recent HISTORY_LIMIT messages."""
+    if not isinstance(message, dict) or "role" not in message or "content" not in message:
+        return
+    with chat_histories_lock:
+        if session_id not in chat_histories:
+            chat_histories[session_id] = []
+        chat_histories[session_id].append(message)
+        # Trim to last HISTORY_LIMIT messages
+        if len(chat_histories[session_id]) > HISTORY_LIMIT:
+            chat_histories[session_id] = chat_histories[session_id][-HISTORY_LIMIT:]
+
+
+@router.post("/reset")
+@router.post("/session/reset")
+async def reset_session(request: Request):
+    """Clear the in-memory history for a given session_id.
+
+    Body: {"session_id": "..."}
+    Returns: {"status": "ok", "cleared": bool}
+    """
+    try:
+        body = await request.json()
+        session_id = str(body.get("session_id", "default"))
+        with chat_histories_lock:
+            existed = session_id in chat_histories
+            if existed:
+                del chat_histories[session_id]
+        print(f"[llm_router] Cleared session history for {session_id}: existed={existed}")
+        return {"status": "ok", "cleared": existed}
+    except Exception as e:
+        print(f"[llm_router] Error clearing session: {e}")
+        return {"status": "error", "error": str(e)}
+
+
+def choose_agent_via_llm(user_query: str, session_id: str = None):
     """Ask the LLM to pick an agent from the registry for the given user_query.
 
     Returns a dict: {"agent": "registry_name", "reason": "..."}
@@ -73,10 +129,16 @@ def choose_agent_via_llm(user_query: str):
             "Choose the single most appropriate agent and return the JSON object as described."
         )
 
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ]
+        # Build messages: system prompt, optional recent session history, then the user prompt
+        messages = [{"role": "system", "content": system_prompt}]
+        if session_id:
+            history_msgs = get_chat_history(session_id)
+            if history_msgs:
+                print(f"[llm_router] Including {len(history_msgs)} history messages from session {session_id} in agent selection prompt")
+                # history_msgs are already in {role, content} format
+                messages.extend(history_msgs)
+
+        messages.append({"role": "user", "content": user_prompt})
 
         resp = openai_client.chat.completions.create(
             model="gpt-5-mini",
@@ -113,11 +175,14 @@ async def chat_endpoint(request: Request):
         print("[llm_router] Received POST request at chat endpoint.")
         body = await request.json()
         user_query = body.get("query")
-        session_id = body.get("session_id", "default")  # Use a real session/user id in production
+        session_id = str(body.get("session_id", "default"))  # Use a real session/user id in production
         print(f"[llm_router] Received user query: {user_query} (session: {session_id})")
 
-        # Ask LLM to choose an agent
-        selection = choose_agent_via_llm(user_query)
+        # Record user message into session history (will be trimmed to HISTORY_LIMIT)
+        add_to_chat_history(session_id, {"role": "user", "content": user_query})
+
+        # Ask LLM to choose an agent (include session history)
+        selection = choose_agent_via_llm(user_query, session_id)
         print(f"[llm_router] Agent selection result: {selection}")
 
         response = None
@@ -125,6 +190,16 @@ async def chat_endpoint(request: Request):
             agent_name = selection.get("agent")
             reason = selection.get("reason")
             print(f"[llm_router] LLM selected agent: {agent_name} (reason: {reason})")
+
+            # If LLM explicitly returned null/None for agent, treat 'reason' as a clarifying question
+            if agent_name is None:
+                if reason:
+                    print(f"[llm_router] LLM requested clarification: {reason}")
+                    # Save assistant clarifying question and return
+                    add_to_chat_history(session_id, {"role": "assistant", "content": reason})
+                    return {"response": reason}
+                else:
+                    print("[llm_router] LLM returned null agent without reason; falling back to default routing")
 
             if agent_name and registry.get(agent_name):
                 agent = registry.get(agent_name)
@@ -141,6 +216,9 @@ async def chat_endpoint(request: Request):
             # fallback: let registry find a matching agent by can_handle
             print("[llm_router] Falling back to registry.route_query")
             response = registry.route_query(user_query)
+
+        # Save assistant response into session history
+        add_to_chat_history(session_id, {"role": "assistant", "content": response})
 
         print(f"[llm_router] Response from agent: {response}")
         return {"response": response}
@@ -207,10 +285,10 @@ async def chat(request: Request):
             "Format answers in concise markdown: headings, bullet points, and include the API source when applicable."
         )
         print("[llm_router] Using OpenAI model.")
-        # Retrieve chat history for this session
-        history = get_chat_history(session_id)
-        # Always start with system prompt
-        messages = [{"role": "system", "content": system_prompt}] + history + [{"role": "user", "content": user_query}]
+    # Retrieve chat history for this session and include it so assistant gets multi-turn context
+    history = get_chat_history(session_id)
+    # Always start with system prompt; history already contains role/content entries
+    messages = [{"role": "system", "content": system_prompt}] + history + [{"role": "user", "content": user_query}]
         #print(f"[llm_router] OpenAI messages: {messages}")
 
         first_response = openai_client.chat.completions.create(

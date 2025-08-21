@@ -9,6 +9,14 @@ const App = () => {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // Mirror backend history limit for UI note
+  const HISTORY_LIMIT = 20;
+
+  // Simple session management: generate a fresh ID per chat session
+  const generateSessionId = () =>
+    `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  const [sessionId, setSessionId] = useState(generateSessionId());
+
   const sendMessage = async () => {
     if (!input.trim()) return;
 
@@ -17,22 +25,62 @@ const App = () => {
     setInput("");
     setLoading(true);
 
+    // Capture the session at send time to avoid race conditions on reset
+    const activeSession = sessionId;
+
     try {
       const res = await axios.post(`${process.env.REACT_APP_API_BASE_URL}/chat`, {
         query: input,
+        session_id: activeSession,
       });
+      // Ignore late responses from a previous session
+      if (activeSession !== sessionId) return;
       setMessages([...newMessages, { role: "assistant", content: res.data.response }]);
     } catch (error) {
+      if (activeSession !== sessionId) return;
       setMessages([...newMessages, { role: "assistant", content: "⚠️ Error fetching response." }]);
     }
 
     setLoading(false);
   };
 
+  const resetChat = () => {
+    // Try to clear server-side session first, then clear UI and start a new session
+    const oldSession = sessionId;
+    const apiBase = process.env.REACT_APP_API_BASE_URL;
+    if (apiBase) {
+      axios
+        .post(`${apiBase}/chat/reset`, { session_id: oldSession })
+        .then((res) => {
+          // ignore response details; proceed to local reset
+          setMessages([]);
+          setInput("");
+          setLoading(false);
+          setSessionId(generateSessionId());
+        })
+        .catch((err) => {
+          console.warn("Failed to clear server session, clearing locally", err);
+          setMessages([]);
+          setInput("");
+          setLoading(false);
+          setSessionId(generateSessionId());
+        });
+    } else {
+      // No backend configured (dev); just clear locally
+      setMessages([]);
+      setInput("");
+      setLoading(false);
+      setSessionId(generateSessionId());
+    }
+  };
+
   return (
     <div className="h-screen w-full flex flex-col" style={{ background: "transparent" }}>
       <div className="w-full flex flex-col header-bar">
         <div className="header-title text-2xl font-semibold p-6 text-center tracking-wide">Saras – Your Personal AI Assistant for Indian Financial Markets</div>
+        <div className="text-center text-sm text-muted px-4 pb-4" style={{ color: 'var(--muted)' }}>
+          Note: Only the last {HISTORY_LIMIT || 20} messages are remembered as context; older messages will not be used in the chat history
+        </div>
       </div>
 
       <div className="flex-1 flex flex-col items-center overflow-y-auto space-y-6 p-10" style={{ backdropFilter: "saturate(120%)" }}>
@@ -75,7 +123,17 @@ const App = () => {
         )}
       </div>
 
-      <div className="flex w-full max-w-4xl mx-auto p-6" style={{ borderTop: '1px solid var(--line)' }}>
+      <div className="flex w-full max-w-4xl mx-auto p-6 items-center" style={{ borderTop: '1px solid var(--line)' }}>
+        <button
+          onClick={resetChat}
+          className="btn px-4 py-2 mr-3 transition-colors text-sm"
+          disabled={loading}
+          title="Reset chat"
+          aria-label="Reset chat"
+          style={{ border: '1px solid var(--line)', borderRadius: 8 }}
+        >
+          Reset
+        </button>
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
@@ -86,7 +144,7 @@ const App = () => {
         />
         <button
           onClick={sendMessage}
-          className="btn btn-primary px-6 py-2 rounded-r-lg transition-colors text-lg"
+          className="btn btn-primary ml-3 px-6 py-2 rounded-r-lg transition-colors text-lg"
           disabled={loading}
         >
           Send
