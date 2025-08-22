@@ -4,7 +4,6 @@ Router for handling LLM-based chat focused on Conference Call data.
 Supports OpenAI and Gemini tool-calling to query the latest API endpoints.
 
 Situations to cater to:
--> Multi-turn conversation
 -> Multiple agents being called in one query
 """
 
