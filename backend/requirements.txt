@@ -8,6 +8,5 @@ lxml
 gunicorn
 openai
 requests
-google-genai
 pytest
 fastmcp
