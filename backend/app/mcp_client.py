@@ -1,3 +1,25 @@
+"""
+Stock/General Trading
+get_holdings - Retrieves portfolio holdings
+get_positions - Gets current positions
+get_margins - Retrieves account margins
+place_order - Places a trading order
+get_quote - Gets quotes for specified symbols
+get_historical_data - Retrieves historical price data
+
+Mutual Funds
+get_mf_orders - Retrieves mutual fund orders
+place_mf_order - Places a mutual fund order
+cancel_mf_order - Cancels a mutual fund order
+get_mf_instruments - Gets available mutual fund instruments
+get_mf_holdings - Retrieves mutual fund holdings
+get_mf_sips - Gets active SIPs
+place_mf_sip - Creates a new SIP
+modify_mf_sip - Modifies an existing SIP
+cancel_mf_sip - Cancels a SIP
+"""
+
+
 import argparse
 import asyncio
 import json
